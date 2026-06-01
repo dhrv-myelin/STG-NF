@@ -76,13 +76,14 @@ class FlowStep(nn.Module):
             first=False,
             strategy='uniform',
             max_hops=8,
+            layout='alphapose',
             device='cuda:0'
     ):
         super().__init__()
         self.device = device
         self.flow_coupling = flow_coupling
         if A is None:
-            g = Graph(strategy=strategy, max_hop=max_hops)
+            g = Graph(layout=layout, strategy=strategy, max_hop=max_hops)
             self.A = torch.from_numpy(g.A).float().to(device)
 
         self.actnorm = ActNorm2d(in_channels, actnorm_scale)
@@ -215,6 +216,7 @@ class FlowNet(nn.Module):
             temporal_kernel_size=None,
             strategy='uniform',
             max_hops=8,
+            layout='alphapose',
             device='cuda:0',
     ):
         super().__init__()
@@ -251,6 +253,7 @@ class FlowNet(nn.Module):
                         first=first,
                         strategy=strategy,
                         max_hops=max_hops,
+                        layout=layout,
                         device=device,
                     )
                 )
@@ -294,6 +297,7 @@ class STG_NF(nn.Module):
             temporal_kernel_size=None,
             strategy='uniform',
             max_hops=8,
+            layout='alphapose',
             device='cuda:0'
     ):
         super().__init__()
@@ -310,6 +314,7 @@ class STG_NF(nn.Module):
             temporal_kernel_size=temporal_kernel_size,
             strategy=strategy,
             max_hops=max_hops,
+            layout=layout,
             device=device,
         )
         self.R = R
