@@ -1,66 +1,60 @@
 # AGENTS.md
 
-## Setup
-- Python 3.8 + CUDA 10.2 required.
-- `conda env create -f environment.yml && conda activate STG-NF`
-- Data must be downloaded separately (Google Drive link in README). Extract into `data/` per the directory structure in README.
-- No lint, format, typecheck, or test commands exist in this repo.
+## Environment and setup (verified)
+- Use the pinned environment: `conda env create -f environment.yml && conda activate STG-NF`
+- Toolchain is old/pinned: Python 3.8, PyTorch 1.10.1, CUDA 10.2 (`environment.yml`).
+- No repo-level lint/format/typecheck/test config exists; do not invent those commands.
+- Data is external (Google Drive link in `README.md`) and expected under `data/`.
 
-## Architecture
-- Single entrypoint: `train_eval.py`
-- `models/STG_NF/model_pose.py` — main model (normalizing flows over ST-GCN blocks)
-- `models/training.py` — Trainer class (train/test loops)
-- `dataset.py` — `PoseSegDataset` loads pose JSONs, builds sliding-window segments
-- `args.py` — all CLI arguments and sub-arg parsing
-- `utils/` — pose transforms, scoring (AUC), data normalization
+## Real entrypoints
+- Main training/eval entrypoint: `train_eval.py`
+- Qualitative per-frame score export: `scripts/test_qualitative.py`
+- AlphaPose extraction wrapper used by this repo: `scripts/run_alphapose.py`
 
-## Key commands
+## Train/eval behavior that is easy to miss
+- `--checkpoint` implies test-only flow in `train_eval.py` (loader built with `only_test=True`).
+- AUC is only computed when GT directories exist:
+  - UBnormal: `data/UBnormal/gt/`
+  - ShanghaiTech/ShanghaiTech-HR: `data/ShanghaiTech/gt/test_frame_mask/`
+- Without GT, `train_eval.py` still runs test and prints segment score shape only.
+- Default `--seg_len` is `24`; UBnormal eval with provided checkpoints must pass `--seg_len 16`.
 
-### Standard training/eval (ShanghaiTech / UBnormal)
-```
-python train_eval.py --dataset ShanghaiTech              # default seg_len=24
-python train_eval.py --dataset UBnormal                  # training (seg_len=16 via default)
+## Dataset/CLI constraints
+- `args.py` restricts `--dataset` to `ShanghaiTech`, `ShanghaiTech-HR`, `UBnormal`.
+- `train_eval.py --dataset MyDataset` is invalid unless code is changed.
+- For custom pose data without GT, use `scripts/test_qualitative.py` for per-frame outputs.
+- `--layout` controls keypoint schema: `alphapose` (17), `openpose` (18), `ntu-rgb+d` (25).
+- Custom dataset filenames are used as clip IDs after stripping `_alphapose_tracked_person.json`.
+
+## AlphaPose integration notes in this repo
+- This repo expects a separate AlphaPose clone at `./AlphaPose`.
+- Required pose checkpoint: `AlphaPose/pretrained_models/fast_421_res152_256x192.pth`.
+- YOLO default detector requires `AlphaPose/detector/yolo/data/yolov3-spp.weights`.
+- `scripts/run_alphapose.py` now:
+  - uses `sys.executable`,
+  - normalizes paths with `abspath`,
+  - sets `PYTHONPATH=<alphapose_dir>`,
+  - sets `ALPHAPOSE_PURE_PY_FALLBACK=1`,
+  - prints full subprocess stderr.
+- Fallback patches for missing AlphaPose extensions are isolated in:
+  - `AlphaPose/alphapose/utils/roi_align/roi_align.py`
+  - `AlphaPose/detector/nms/nms_wrapper.py`
+
+## Known local gotchas
+- On newer NVIDIA GPUs (e.g. RTX 30xx), this pinned PyTorch/CUDA stack can show unsupported SM warnings; CPU fallback (`--gpus -1` in direct AlphaPose commands) may be required.
+- If AlphaPose fails, run `AlphaPose/scripts/demo_inference.py` directly first to isolate detector/model issues before rerunning `scripts/run_alphapose.py`.
+
+## Useful commands
+```bash
+# ShanghaiTech eval
+python train_eval.py --dataset ShanghaiTech --checkpoint checkpoints/ShanghaiTech_85_9.tar
+
+# UBnormal eval
 python train_eval.py --dataset UBnormal --seg_len 16 --checkpoint checkpoints/UBnormal_unsupervised_71_8.tar
-python train_eval.py --dataset UBnormal --seg_len 16 --R 10 --checkpoint checkpoints/UBnormal_supervised_79_2.tar
-python train_eval.py --dataset ShanghaiTech      --checkpoint checkpoints/ShanghaiTech_85_9.tar
-python train_eval.py --dataset ShanghaiTech-HR   --checkpoint checkpoints/ShanghaiTech_85_9.tar
+
+# Batch pose extraction via repo wrapper
+python scripts/run_alphapose.py --input_dir <videos_dir> --output_dir <pose_json_out> --alphapose_dir ./AlphaPose/
+
+# Qualitative per-frame score export (no GT required)
+python scripts/test_qualitative.py --checkpoint <ckpt.tar> --pose_path_test <pose_test_dir> --layout alphapose --output_dir results/
 ```
-
-### Custom dataset
-```
-# 1. Extract poses from videos via AlphaPose
-python scripts/run_alphapose.py \
-  --input_dir /path/to/train/videos/ \
-  --output_dir data/MyDataset/pose/train/ \
-  --alphapose_dir /path/to/AlphaPose/
-
-python scripts/run_alphapose.py \
-  --input_dir /path/to/test/videos/ \
-  --output_dir data/MyDataset/pose/test/ \
-  --alphapose_dir /path/to/AlphaPose/
-
-# 2. Train (no GT needed)
-python train_eval.py --dataset MyDataset \
-  --pose_path_train data/MyDataset/pose/train/ \
-  --pose_path_test data/MyDataset/pose/test/ \
-  --layout alphapose --epochs 20
-
-# 3. Qualitative evaluation (per-frame anomaly scores, no GT)
-python scripts/test_qualitative.py \
-  --checkpoint data/exp_dir/MyDataset/<timestamp>/*.tar \
-  --pose_path_test data/MyDataset/pose/test/ \
-  --layout alphapose --output_dir results/
-```
-
-### Custom data generation (legacy)
-Requires AlphaPose repo + pretrained models on disk:
-```
-python gen_data.py --alphapose_dir /path/to/AlphaPose/ --dir /input/dir/ --outdir /output/dir/ [--video]
-```
-
-## Non-obvious details
-- `--layout` controls skeleton keypoint count: `alphapose` (17 kp, default), `openpose` (18 kp), `ntu-rgb+d` (25 kp).
-- For custom datasets, only `--pose_path_train` and `--pose_path_test` are required. `--vid_path_train/test` are optional.
-- Custom dataset filenames are used as-is for `clip_id` (strip `_alphapose_tracked_person.json` suffix). No numeric prefix needed.
-- No GT required for custom datasets — AUC computation is skipped when GT directory doesn't exist. Use `scripts/test_qualitative.py` for per-frame anomaly score output.
-- `--only_test` flag skips training; it's automatically set when `--checkpoint` is provided (see `train_eval.py:35`).

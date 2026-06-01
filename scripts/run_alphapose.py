@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from posixpath import basename
 
@@ -31,7 +32,7 @@ def process_video(video_path, output_dir, alphapose_dir, skip_existing):
     alphapose_results = os.path.join(output_dir, 'alphapose-results.json')
 
     cmd = [
-        'python', 'scripts/demo_inference.py',
+        sys.executable, 'scripts/demo_inference.py',
         '--cfg', os.path.join(alphapose_dir, 'configs/coco/resnet/256x192_res152_lr1e-3_1x-duc.yaml'),
         '--checkpoint', os.path.join(alphapose_dir, 'pretrained_models/fast_421_res152_256x192.pth'),
         '--outdir', output_dir,
@@ -40,9 +41,13 @@ def process_video(video_path, output_dir, alphapose_dir, skip_existing):
     ]
 
     print(f"  Processing {stem}...")
-    result = subprocess.run(cmd, cwd=alphapose_dir, capture_output=True, text=True)
+    env = os.environ.copy()
+    env['PYTHONPATH'] = alphapose_dir + os.pathsep + env.get('PYTHONPATH', '')
+    env['ALPHAPOSE_PURE_PY_FALLBACK'] = '1'
+    result = subprocess.run(cmd, cwd=alphapose_dir, capture_output=True, text=True, env=env)
     if result.returncode != 0:
-        print(f"  ERROR processing {stem}: {result.stderr[:200]}")
+        print(f"  ERROR processing {stem}:")
+        print(result.stderr.strip())
         return
 
     if not os.path.exists(alphapose_results):
@@ -75,19 +80,23 @@ def main():
     ap.add_argument('--skip_existing', action='store_true', help='Skip already-processed videos')
 
     args = ap.parse_args()
-    os.makedirs(args.output_dir, exist_ok=True)
+    alphapose_dir = os.path.abspath(args.alphapose_dir)
+    output_dir = os.path.abspath(args.output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
     exts = tuple(args.extensions.split(','))
-    videos = [f for f in os.listdir(args.input_dir) if f.lower().endswith(exts)]
+    input_dir = os.path.abspath(args.input_dir)
+    videos = [f for f in os.listdir(input_dir) if f.lower().endswith(exts)]
     videos.sort()
 
     if not videos:
-        print(f"No videos found in {args.input_dir}")
+        print(f"No videos found in {input_dir}")
         return
 
     print(f"Found {len(videos)} videos")
     for v in videos:
-        process_video(os.path.join(args.input_dir, v), args.output_dir, args.alphapose_dir, args.skip_existing)
+        video_path = os.path.join(input_dir, v)
+        process_video(video_path, output_dir, alphapose_dir, args.skip_existing)
 
 
 if __name__ == '__main__':
