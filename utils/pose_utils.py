@@ -73,8 +73,10 @@ def gen_clip_seg_data_np(clip_dict, start_ofst=0, seg_stride=4, seg_len=12, scen
         sing_pose_np, sing_pose_meta, sing_pose_keys, sing_scores_np = single_pose_dict2np(clip_dict, idx)
         if dataset == "UBnormal":
             key = ('{:02d}_{}_{:02d}'.format(int(scene_id), clip_id, int(idx)))
-        else:
+        elif dataset in ("ShanghaiTech", "ShanghaiTech-HR"):
             key = ('{:02d}_{:04d}_{:02d}'.format(int(scene_id), int(clip_id), int(idx)))
+        else:
+            key = ('{:02d}_{}_{:02d}'.format(int(scene_id), clip_id, int(idx)))
         person_keys[key] = sing_pose_keys
         curr_pose_segs_np, curr_pose_segs_meta, curr_pose_score_np = split_pose_to_segments(sing_pose_np,
                                                                                             sing_pose_meta,
@@ -175,7 +177,9 @@ def split_pose_to_segments(single_pose_np, single_pose_meta, single_pose_keys, s
             pose_score_np = np.append(pose_score_np, curr_score, axis=0)
             if dataset == "UBnormal":
                 pose_segs_meta.append([int(scene_id), clip_id, int(single_pose_meta[0]), int(start_key)])
-            else:
+            elif dataset in ("ShanghaiTech", "ShanghaiTech-HR"):
                 pose_segs_meta.append([int(scene_id), int(clip_id), int(single_pose_meta[0]), int(start_key)])
+            else:
+                pose_segs_meta.append([int(scene_id), clip_id, int(single_pose_meta[0]), int(start_key)])
     return pose_segs_np, pose_segs_meta, pose_score_np
 

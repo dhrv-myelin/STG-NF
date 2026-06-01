@@ -20,6 +20,7 @@ def init_model_params(args, dataset):
         'strategy': args.adj_strategy,
         'max_hops': args.max_hops,
         'device': args.device,
+        'layout': getattr(args, 'layout', 'alphapose'),
     }
 
 

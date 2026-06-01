@@ -1,3 +1,4 @@
+import os
 import random
 import numpy as np
 import torch
@@ -48,12 +49,26 @@ def main():
         dump_args(args, args.ckpt_dir)
 
     normality_scores = trainer.test()
-    auc, scores = score_dataset(normality_scores, dataset["test"].metadata, args=args)
 
-    # Logging and recording results
-    print("\n-------------------------------------------------------")
-    print("\033[92m Done with {}% AuC for {} samples\033[0m".format(auc * 100, scores.shape[0]))
-    print("-------------------------------------------------------\n\n")
+    if args.dataset in ('UBnormal', 'ShanghaiTech', 'ShanghaiTech-HR'):
+        if args.dataset == 'UBnormal':
+            gt_available = os.path.isdir('data/UBnormal/gt/')
+        else:
+            gt_available = os.path.isdir('data/ShanghaiTech/gt/test_frame_mask/')
+    else:
+        gt_available = False
+
+    if gt_available:
+        auc, scores = score_dataset(normality_scores, dataset["test"].metadata, args=args)
+        print("\n-------------------------------------------------------")
+        print("\033[92m Done with {}% AuC for {} samples\033[0m".format(auc * 100, scores.shape[0]))
+        print("-------------------------------------------------------\n\n")
+    else:
+        scores = normality_scores
+        print("\n-------------------------------------------------------")
+        print("Test complete (no GT available). Per-segment scores shape: {}".format(scores.shape))
+        print("Use scripts/test_qualitative.py to get per-frame anomaly scores.")
+        print("-------------------------------------------------------\n\n")
 
 
 if __name__ == '__main__':
