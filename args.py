@@ -12,16 +12,16 @@ def init_args():
 
 def init_sub_args(args):
     dataset = "UBnormal" if args.dataset == "UBnormal" else "ShanghaiTech"
-    if args.vid_path_train and args.vid_path_test and args.pose_path_train and args.pose_path_test:
-        args.vid_path = {'train': args.vid_path_train,
-                         'test': args.vid_path_test}
-
+    if args.pose_path_train and args.pose_path_test:
         args.pose_path = {'train': args.pose_path_train,
                           'test': args.pose_path_test}
+        args.vid_path = {
+            'train': getattr(args, 'vid_path_train', None) or '',
+            'test': getattr(args, 'vid_path_test', None) or '',
+        }
     else:
         args.vid_path = {'train': os.path.join(args.data_dir, dataset, 'train/images/'),
                          'test':  os.path.join(args.data_dir, dataset, 'test/frames/')}
-
         args.pose_path = {'train': os.path.join(args.data_dir, dataset, 'pose', 'train/'),
                           'test':  os.path.join(args.data_dir, dataset, 'pose', 'test/')}
     args.pose_path["train_abnormal"] = args.pose_path_train_abnormal
@@ -40,6 +40,8 @@ def init_parser(default_data_dir='data/', default_exp_dir='data/exp_dir'):
     parser.add_argument('--pose_path_test', type=str, default=None, help='Path to test pose')
     parser.add_argument('--dataset', type=str, default='ShanghaiTech',
                         choices=['ShanghaiTech', 'ShanghaiTech-HR', 'UBnormal'], help='Dataset for Eval')
+    parser.add_argument('--layout', type=str, default='alphapose',
+                        choices=['openpose', 'alphapose', 'ntu-rgb+d'], help='Skeleton layout (default: alphapose)')
     parser.add_argument('--vid_res', type=str, default=None, help='Video Res')
     parser.add_argument('--device', type=str, default='cuda:0', metavar='DEV', help='Device for feature calculation (default: \'cuda:0\')')
     parser.add_argument('--seed', type=int, metavar='S', default=999, help='Random seed, use 999 for random (default: 999)')

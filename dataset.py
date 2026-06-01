@@ -123,7 +123,8 @@ def get_dataset_and_loader(args, trans_list, only_test=False):
     loader_args = {'batch_size': args.batch_size, 'num_workers': args.num_workers, 'pin_memory': True}
     dataset_args = {'headless': args.headless, 'scale': args.norm_scale, 'scale_proportional': args.prop_norm_scale,
                     'seg_len': args.seg_len, 'return_indices': True, 'return_metadata': True, "dataset": args.dataset,
-                    'train_seg_conf_th': args.train_seg_conf_th, 'specific_clip': args.specific_clip}
+                    'train_seg_conf_th': args.train_seg_conf_th, 'specific_clip': args.specific_clip,
+                    'layout': getattr(args, 'layout', 'alphapose')}
     dataset, loader = dict(), dict()
     splits = ['train', 'test'] if not only_test else ['test']
     for split in splits:
@@ -165,6 +166,7 @@ def gen_dataset(person_json_root, num_clips=None, kp18_format=True, ret_keys=Fal
     headless = dataset_args.get('headless', False)
     seg_conf_th = dataset_args.get('train_seg_conf_th', 0.0)
     dataset = dataset_args.get('dataset', 'ShanghaiTech')
+    layout = dataset_args.get('layout', 'alphapose')
 
     dir_list = os.listdir(person_json_root)
     json_list = sorted([fn for fn in dir_list if fn.endswith('tracked_person.json')])
@@ -175,10 +177,13 @@ def gen_dataset(person_json_root, num_clips=None, kp18_format=True, ret_keys=Fal
             type, scene_id, clip_id = \
                 re.findall('(abnormal|normal)_scene_(\d+)_scenario(.*)_alphapose_.*', person_dict_fn)[0]
             clip_id = type + "_" + clip_id
-        else:
+        elif dataset in ("ShanghaiTech", "ShanghaiTech-HR"):
             scene_id, clip_id = person_dict_fn.split('_')[:2]
-            if shanghaitech_hr_skip(dataset=="ShaghaiTech-HR", scene_id, clip_id):
+            if shanghaitech_hr_skip(dataset == "ShanghaiTech-HR", scene_id, clip_id):
                 continue
+        else:
+            scene_id = '0'
+            clip_id = os.path.splitext(person_dict_fn)[0].replace('_alphapose_tracked_person', '')
         clip_json_path = os.path.join(person_json_root, person_dict_fn)
         with open(clip_json_path, 'r') as f:
             clip_dict = json.load(f)
@@ -211,7 +216,7 @@ def gen_dataset(person_json_root, num_clips=None, kp18_format=True, ret_keys=Fal
     #     global_data_np = normalize_pose(global_data_np, vid_res=vid_res, **dataset_args)
     #     global_data = [normalize_pose(np.expand_dims(data, axis=0), **dataset_args).squeeze() for data
     #                    in global_data]
-    if kp18_format and segs_data_np.shape[-2] == 17:
+    if kp18_format and segs_data_np.shape[-2] == 17 and layout != 'alphapose':
         segs_data_np = keypoints17_to_coco18(segs_data_np)
         global_data_np = keypoints17_to_coco18(global_data_np)
         global_data = [keypoints17_to_coco18(data) for data in global_data]
