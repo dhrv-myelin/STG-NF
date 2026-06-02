@@ -39,7 +39,7 @@ def init_parser(default_data_dir='data/', default_exp_dir='data/exp_dir'):
     parser.add_argument('--vid_path_test', type=str, default=None, help='Path to test vids')
     parser.add_argument('--pose_path_test', type=str, default=None, help='Path to test pose')
     parser.add_argument('--dataset', type=str, default='ShanghaiTech',
-                        choices=['ShanghaiTech', 'ShanghaiTech-HR', 'UBnormal'], help='Dataset for Eval')
+                        help='Dataset name (used for experiment dir and filename parsing)')
     parser.add_argument('--layout', type=str, default='alphapose',
                         choices=['openpose', 'alphapose', 'ntu-rgb+d'], help='Skeleton layout (default: alphapose)')
     parser.add_argument('--vid_res', type=str, default=None, help='Video Res')
