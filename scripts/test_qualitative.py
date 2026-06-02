@@ -75,6 +75,14 @@ def main():
     args.data_dir = 'data/'
     args.seed = 999
     args.pose_path_train_abnormal = None
+    args.K = 8
+    args.L = 1
+    args.R = 3.0
+    args.flow_permutation = 'permute'
+    args.edge_importance = False
+    args.temporal_kernel = None
+    args.adj_strategy = 'uniform'
+    args.max_hops = 8
     args.vid_path_train = None
     args.vid_path_test = None
     args.vid_path = {
