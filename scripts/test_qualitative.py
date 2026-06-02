@@ -102,6 +102,11 @@ def main():
     model_args = init_model_params(args, {"test": dataset})
     model = STG_NF(**model_args)
 
+    if not os.path.isfile(args.checkpoint):
+        print(f"ERROR: Checkpoint not found at '{args.checkpoint}'")
+        import sys
+        sys.exit(1)
+
     optimizer_f = init_optimizer('adamx', lr=5e-4)
 
     trainer = Trainer(args, model, None, loader['test'],
