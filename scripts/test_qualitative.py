@@ -84,6 +84,7 @@ def main():
     args.temporal_kernel = None
     args.adj_strategy = 'uniform'
     args.max_hops = 8
+    args.ckpt_dir = args.output_dir
     args.vid_path_train = None
     args.vid_path_test = None
     args.vid_path = {
