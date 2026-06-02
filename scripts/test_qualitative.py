@@ -77,6 +77,14 @@ def main():
     args.pose_path_train_abnormal = None
     args.vid_path_train = None
     args.vid_path_test = None
+    args.vid_path = {
+        'train': getattr(args, 'vid_path_train', None) or '',
+        'test': getattr(args, 'vid_path_test', None) or '',
+    }
+    args.pose_path = {
+        'train': getattr(args, 'pose_path_train', None) or '',
+        'test': getattr(args, 'pose_path_test', None) or '',
+    }
 
     _, loader = get_dataset_and_loader(args, trans_list=trans_list, only_test=True)
     dataset = loader['test'].dataset
