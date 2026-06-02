@@ -175,7 +175,7 @@ def gen_dataset(person_json_root, num_clips=None, kp18_format=True, ret_keys=Fal
     for person_dict_fn in tqdm(json_list):
         if dataset == "UBnormal":
             type, scene_id, clip_id = \
-                re.findall('(abnormal|normal)_scene_(\d+)_scenario(.*)_alphapose_.*', person_dict_fn)[0]
+                re.findall(r'(abnormal|normal)_scene_(\d+)_scenario(.*)_alphapose_.*', person_dict_fn)[0]
             clip_id = type + "_" + clip_id
         elif dataset in ("ShanghaiTech", "ShanghaiTech-HR"):
             scene_id, clip_id = person_dict_fn.split('_')[:2]
