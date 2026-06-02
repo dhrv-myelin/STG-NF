@@ -12,6 +12,7 @@ from dataset import get_dataset_and_loader
 from models.STG_NF.model_pose import STG_NF
 from utils.data_utils import trans_list
 from utils.train_utils import init_model_params
+from utils.optim_init import init_optimizer
 from models.training import Trainer
 
 
@@ -100,21 +101,10 @@ def main():
     model_args = init_model_params(args, {"test": dataset})
     model = STG_NF(**model_args)
 
-    class DummyArgs:
-        pass
-    trainer_args = DummyArgs()
-    trainer_args.device = args.device
-    trainer_args.model_confidence = False
-    trainer_args.ckpt_dir = args.output_dir
-    trainer_args.model_lr = 5e-4
-    trainer_args.model_lr_decay = 0.99
-    trainer_args.model_optimizer = 'adamx'
-    trainer_args.model_sched = 'exp_decay'
-    trainer_args.optimizer = None
-    trainer_args.lr = None
-    trainer_args.weight_decay = None
+    optimizer_f = init_optimizer('adamx', lr=5e-4)
 
-    trainer = Trainer(trainer_args, model, None, loader['test'])
+    trainer = Trainer(args, model, None, loader['test'],
+                      optimizer_f=optimizer_f)
     trainer.load_checkpoint(args.checkpoint)
 
     print("Running inference...")
