@@ -26,7 +26,7 @@ def segment_to_frame_scores(scores, metadata, seg_len):
 
     clip_scores = {}
     for (scene, clip), persons in clip_person_frames.items():
-        max_frame = max(max(f) for frames in persons.values() for f in frames)
+        max_frame = max(f for frames in persons.values() for f in frames)
         per_frame = np.full(max_frame + 1, np.inf)
 
         for fs in persons.values():
