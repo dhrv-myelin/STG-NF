@@ -4,7 +4,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from posixpath import basename
+
+from tqdm import tqdm
 
 
 def convert_data_format(data):
@@ -26,7 +27,7 @@ def process_video(video_path, output_dir, alphapose_dir, skip_existing):
     out_path = os.path.join(output_dir, out_name)
 
     if skip_existing and os.path.exists(out_path):
-        print(f"  Skipping {stem} (already exists)")
+        tqdm.write(f"  Skipping {stem} (already exists)")
         return
 
     alphapose_results = os.path.join(output_dir, 'alphapose-results.json')
@@ -40,18 +41,17 @@ def process_video(video_path, output_dir, alphapose_dir, skip_existing):
         '--video', video_path,
     ]
 
-    print(f"  Processing {stem}...")
     env = os.environ.copy()
     env['PYTHONPATH'] = alphapose_dir + os.pathsep + env.get('PYTHONPATH', '')
     env['ALPHAPOSE_PURE_PY_FALLBACK'] = '1'
     result = subprocess.run(cmd, cwd=alphapose_dir, capture_output=True, text=True, env=env)
     if result.returncode != 0:
-        print(f"  ERROR processing {stem}:")
-        print(result.stderr.strip())
+        tqdm.write(f"  ERROR processing {stem}:")
+        tqdm.write(result.stderr.strip())
         return
 
     if not os.path.exists(alphapose_results):
-        print(f"  ERROR: alphapose-results.json not found for {stem}")
+        tqdm.write(f"  ERROR: alphapose-results.json not found for {stem}")
         return
 
     with open(alphapose_results) as f:
@@ -68,7 +68,7 @@ def process_video(video_path, output_dir, alphapose_dir, skip_existing):
             os.remove(os.path.join(poseflow_dir, fname))
         os.rmdir(poseflow_dir)
 
-    print(f"  Saved {out_name}")
+    tqdm.write(f"  Saved {out_name}")
 
 
 def main():
@@ -93,8 +93,7 @@ def main():
         print(f"No videos found in {input_dir}")
         return
 
-    print(f"Found {len(videos)} videos")
-    for v in videos:
+    for v in tqdm(videos, desc="Processing videos", unit="video"):
         video_path = os.path.join(input_dir, v)
         process_video(video_path, output_dir, alphapose_dir, args.skip_existing)
 

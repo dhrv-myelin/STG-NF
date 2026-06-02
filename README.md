@@ -84,6 +84,34 @@ It is also recommended to use the YOLOX-X detector, which can be downloaded from
 Use the flag --video for video folder, otherwise assumes a folder of JPG/PNG images for each video.
     python gen_data.py --alphapose_dir /path/to/AlphaPoseFloder/ --dir /input/dir/ --outdir /output/dir/ [--video]
 
+### Quickstart (Custom Dataset)
+
+Setup your video directories, extract poses, and train/evaluate:
+
+```bash
+# 1. Organize video files under data/
+#    data/cashier_anom/train/  → normal training videos
+#    data/cashier_anom/test/   → abnormal test videos
+mkdir -p data/cashier_anom/pose/{train,test}
+
+# 2. Extract poses from training videos
+python scripts/run_alphapose.py \
+    --input_dir ./data/cashier_anom/train/ \
+    --output_dir ./data/cashier_anom/pose/train/ \
+    --alphapose_dir ./AlphaPose/
+
+# 3. Extract poses from test videos
+python scripts/run_alphapose.py \
+    --input_dir ./data/cashier_anom/test/ \
+    --output_dir ./data/cashier_anom/pose/test/ \
+    --alphapose_dir ./AlphaPose/
+
+# 4. Train & evaluate STG-NF
+python train_eval.py \
+    --pose_path_train ./data/cashier_anom/pose/train/ \
+    --pose_path_test ./data/cashier_anom/pose/test/
+```
+
 ## Training/Testing
 Training and Evaluating is run using:
 ```
