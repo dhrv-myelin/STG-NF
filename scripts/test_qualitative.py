@@ -1,9 +1,12 @@
 import os
+import sys
 import argparse
 import numpy as np
 import torch
 from collections import defaultdict
 from scipy.ndimage import gaussian_filter1d
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from args import init_parser
 from dataset import get_dataset_and_loader
 from models.STG_NF.model_pose import STG_NF
