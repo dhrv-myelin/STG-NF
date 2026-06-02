@@ -78,38 +78,32 @@ A path for the directory may be configured using the arguments:
     --pose_path_test
 
 ### Custom Dataset
-We provide a script for creating JSON files in the accepted format using [AlphaPose](https://github.com/MVIG-SJTU/AlphaPose).
-Please download into pretrained_models folders [fast_421_res152_256x192.pth](https://drive.google.com/open?id=1kfyedqyn8exjbbNmYq8XGd2EooQjPtF9)
-It is also recommended to use the YOLOX-X detector, which can be downloaded from the AlphaPose repository.
-Use the flag --video for video folder, otherwise assumes a folder of JPG/PNG images for each video.
-    python gen_data.py --alphapose_dir /path/to/AlphaPoseFloder/ --dir /input/dir/ --outdir /output/dir/ [--video]
+
+Extract poses using the recommended YOLO-pose pipeline (auto-downloads model on first use):
+
+    python scripts/run_yolo_pose.py --input_dir <VIDEO_DIR> --output_dir <POSE_DIR>
+    
+Or using the legacy AlphaPose pipeline (requires manual weight downloads — see `doc_changes/`):
+
+    python gen_data.py --alphapose_dir ./AlphaPose/ --dir <VIDEO_DIR> --outdir <POSE_DIR> [--video]
 
 ### Quickstart (Custom Dataset)
 
-Setup your video directories, extract poses, and train/evaluate:
-
 ```bash
-# 1. Organize video files under data/
-#    data/cashier_anom/train/  → normal training videos
-#    data/cashier_anom/test/   → abnormal test videos
-mkdir -p data/cashier_anom/pose/{train,test}
+# 1. Extract poses from training videos
+python scripts/run_yolo_pose.py \
+    --input_dir <VIDEOS/train> \
+    --output_dir <DATA/pose/train>
 
-# 2. Extract poses from training videos
-python scripts/run_alphapose.py \
-    --input_dir ./data/cashier_anom/train/ \
-    --output_dir ./data/cashier_anom/pose/train/ \
-    --alphapose_dir ./AlphaPose/
+# 2. Extract poses from test videos
+python scripts/run_yolo_pose.py \
+    --input_dir <VIDEOS/test> \
+    --output_dir <DATA/pose/test>
 
-# 3. Extract poses from test videos
-python scripts/run_alphapose.py \
-    --input_dir ./data/cashier_anom/test/ \
-    --output_dir ./data/cashier_anom/pose/test/ \
-    --alphapose_dir ./AlphaPose/
-
-# 4. Train & evaluate STG-NF
+# 3. Train & evaluate STG-NF
 python train_eval.py \
-    --pose_path_train ./data/cashier_anom/pose/train/ \
-    --pose_path_test ./data/cashier_anom/pose/test/
+    --pose_path_train <DATA/pose/train> \
+    --pose_path_test <DATA/pose/test>
 ```
 
 ## Training/Testing
