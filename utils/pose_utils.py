@@ -233,11 +233,8 @@ def split_pose_to_segments(
     pose_segs_np = np.empty([0, seg_len, kp_count, kp_dim])
     pose_score_np = np.empty([0, seg_len])
     pose_segs_meta = []
-    # num_segs = np.ceil((clip_t - seg_len) / seg_dist).astype(np.int)
     num_segs = int(np.ceil((clip_t - seg_len) / seg_dist))
-    single_pose_keys_sorted = sorted(
-        [int(i) for i in single_pose_keys]
-    )  # , key=lambda x: int(x))
+    single_pose_keys_sorted = sorted([int(i) for i in single_pose_keys])  # , key=lambda x: int(x))
     for seg_ind in range(num_segs):
         start_ind = start_ofst + seg_ind * seg_dist
         start_key = single_pose_keys_sorted[start_ind]
