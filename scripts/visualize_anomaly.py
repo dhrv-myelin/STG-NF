@@ -29,13 +29,23 @@ def _build_timeline_bar(width, bar_height, scores):
 
 def _draw_text_with_bg(img, text, org, font_face, font_scale, text_color,
                        bg_color=(0, 0, 0), thickness=1, padding=4):
-    """Draw text with a solid background rectangle for readability."""
     (tw, th), baseline = cv2.getTextSize(text, font_face, font_scale, thickness)
     x, y = org
     cv2.rectangle(img, (x - padding, y - th - padding),
                   (x + tw + padding, y + baseline + padding), bg_color, -1)
     cv2.putText(img, text, (x, y), font_face, font_scale, text_color, thickness,
                 cv2.LINE_AA)
+
+
+def _open_writer(path, fps, width, height):
+    """Try multiple fourcc codes until one works."""
+    for fourcc_str in ["avc1", "X264", "mp4v", "MJPG"]:
+        fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
+        writer = cv2.VideoWriter(path, fourcc, fps, (width, height))
+        if writer.isOpened():
+            print(f"  VideoWriter: using {fourcc_str} codec")
+            return writer
+    raise RuntimeError(f"Could not open VideoWriter for {path}")
 
 
 def main():
@@ -86,30 +96,36 @@ def main():
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    n_scores = len(raw_scores)
 
-    if args.no_tint:
-        out_height = height + args.timeline_height + 5
-    else:
-        out_height = height + args.timeline_height + 5
+    # Pad scores to match total_frames so we never have a size mismatch
+    if n_scores < total_frames:
+        pad_count = total_frames - n_scores
+        raw_scores = np.concatenate([raw_scores, np.full(pad_count, raw_scores[-1])])
+        display_scores = np.concatenate([display_scores, np.full(pad_count, display_scores[-1])])
+        print(f"  Padded scores: {n_scores} -> {total_frames} (last score repeated)")
+        n_scores = total_frames
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(args.output, fourcc, fps, (width, out_height))
+    separator_h = 3
+    out_height = height + separator_h + args.timeline_height
+
+    os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+    out = _open_writer(args.output, fps, width, out_height)
 
     timeline_bar = _build_timeline_bar(width, args.timeline_height, display_scores)
+    separator = np.full((separator_h, width, 3), 32, dtype=np.uint8)
 
-    print(f"Frames: {total_frames}  |  Scores: {len(raw_scores)}")
+    print(f"Frames: {total_frames}  |  Scores: {n_scores}")
     if args.raw_scores:
         print(f"Raw score range: [{vmin:.6f}, {vmax:.6f}]")
     else:
         print(f"Normalized score range: [0.0, 1.0]  (from raw [{vmin:.6f}, {vmax:.6f}])")
     print(f"Output: {args.output}")
 
-    # Font for score overlay
     font_face = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = args.font_scale
     font_thickness = 2
 
-    # Determine format string based on score magnitude
     abs_max = max(abs(vmin), abs(vmax))
     if abs_max >= 100:
         score_fmt = "{:.1f}"
@@ -126,47 +142,42 @@ def main():
 
         vis = frame.copy()
 
-        if not args.no_tint and frame_idx < len(display_scores):
+        if not args.no_tint and frame_idx < n_scores:
             s = display_scores[frame_idx]
             tint_color = _color_for_score(s)
             overlay = vis.copy()
             cv2.rectangle(overlay, (0, 0), (width, height), tint_color, -1)
             vis = cv2.addWeighted(overlay, args.alpha, vis, 1 - args.alpha, 0)
 
-        # Draw score text on the frame
-        if frame_idx < len(raw_scores):
+        if frame_idx < n_scores:
             score_val = raw_scores[frame_idx]
             label = f"Score: {score_fmt.format(score_val)}"
-            # White text with black background, top-left corner
             _draw_text_with_bg(vis, label, (15, 40), font_face, font_scale,
                                text_color=(255, 255, 255), bg_color=(0, 0, 0),
                                thickness=font_thickness, padding=6)
 
-            # Frame counter, top-right
-            frame_label = f"Frame {frame_idx}/{len(raw_scores)}"
+            frame_label = f"Frame {frame_idx}/{n_scores}"
             _draw_text_with_bg(vis, frame_label, (width - 300, 40), font_face, 0.7,
                                text_color=(200, 200, 200), bg_color=(0, 0, 0),
                                thickness=1, padding=4)
 
-        # Separator line
-        vis = np.vstack([vis, np.full((3, width, 3), 32, dtype=np.uint8)])
-
-        # Timeline bar
         bar_copy = timeline_bar.copy()
-        if frame_idx < len(display_scores):
-            cx = int(frame_idx / len(display_scores) * width)
+        if frame_idx < n_scores:
+            cx = int(frame_idx / n_scores * width)
             cv2.line(bar_copy, (cx, 0), (cx, args.timeline_height - 1),
                      (255, 255, 255), 2)
-            label = f"{score_fmt.format(raw_scores[frame_idx])}"
-            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            lbl = f"{score_fmt.format(raw_scores[frame_idx])}"
+            (tw, th), _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             lx = min(cx - tw // 2, width - tw - 4)
             ly = args.timeline_height - 4
             cv2.rectangle(bar_copy, (lx - 2, ly - th - 2),
                           (lx + tw + 2, ly + 2), (0, 0, 0), -1)
-            cv2.putText(bar_copy, label, (lx, ly),
+            cv2.putText(bar_copy, lbl, (lx, ly),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-        vis = np.vstack([vis, bar_copy])
+        vis = np.vstack([vis, separator, bar_copy])
+        assert vis.shape == (out_height, width, 3), \
+            f"Frame size mismatch: {vis.shape} != ({out_height}, {width}, 3)"
         out.write(vis)
         frame_idx += 1
 
