@@ -146,7 +146,6 @@ mkdir -p results/refined
 python scripts/refine_scores.py \
     --results_dir results/raw/ \
     --output_dir results/refined/ \
-    --window 100 \
     --smooth_sigma 3 \
     --method both
 
