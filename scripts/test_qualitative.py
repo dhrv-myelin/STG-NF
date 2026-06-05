@@ -17,21 +17,38 @@ from models.training import Trainer
 
 
 def segment_to_frame_scores(scores, metadata, seg_len, smooth_passes=3):
+    """Map segment scores to per-frame scores using ALL overlapping segments.
+
+    Each segment covers frames [start, start+seg_len). Its score is contributed
+    to every frame it covers. For each frame, take the min across all covering
+    segments (most anomalous wins). This uses seg_len x more information than
+    center-frame mapping.
+    """
     metadata_np = np.array(metadata)
-    clip_person_frames = defaultdict(lambda: defaultdict(dict))
+    # (scene, clip) -> person -> list of (frame, score)
+    clip_person_frames = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
     for i, (scene, clip, person, start) in enumerate(metadata_np):
-        center = int(start) + seg_len // 2
-        clip_person_frames[(scene, clip)][int(person)][center] = scores[i]
+        start_f = int(start)
+        for f in range(start_f, start_f + seg_len):
+            clip_person_frames[(scene, clip)][int(person)][f].append(scores[i])
 
     clip_scores = {}
     for (scene, clip), persons in clip_person_frames.items():
-        max_frame = max(f for frames in persons.values() for f in frames)
+        all_frame_idxs = set()
+        for person_dict in persons.values():
+            all_frame_idxs.update(person_dict.keys())
+
+        if not all_frame_idxs:
+            continue
+
+        max_frame = max(all_frame_idxs)
         per_frame = np.full(max_frame + 1, np.inf)
 
-        for fs in persons.values():
-            for f, s in fs.items():
-                per_frame[f] = min(per_frame[f], s)
+        # For each frame, take min score across all segments covering it
+        for person_dict in persons.values():
+            for f, score_list in person_dict.items():
+                per_frame[f] = min(per_frame[f], min(score_list))
 
         finite = per_frame[np.isfinite(per_frame)]
         if len(finite) > 0:
