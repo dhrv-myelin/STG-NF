@@ -56,7 +56,9 @@ def process_video(video_path, output_dir, model, skip_existing, conf, iou):
     if not data:
         tqdm.write(f"  WARNING: No detections in {stem}, writing empty JSON")
     else:
-        tqdm.write(f"  {stem}: {len(data)} tracks, {sum(len(v) for v in data.values())} frames")
+        tqdm.write(
+            f"  {stem}: {len(data)} tracks, {sum(len(v) for v in data.values())} frames"
+        )
 
     os.makedirs(output_dir, exist_ok=True)
     with open(out_path, "w") as f:
@@ -64,17 +66,28 @@ def process_video(video_path, output_dir, model, skip_existing, conf, iou):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="YOLO-pose + ByteTrack extraction for STG-NF")
+    ap = argparse.ArgumentParser(
+        description="YOLO-pose + ByteTrack extraction for STG-NF"
+    )
     ap.add_argument("--input_dir", required=True, help="Directory with video files")
     ap.add_argument("--output_dir", required=True, help="Directory for JSON output")
-    ap.add_argument("--model", default="yolo11n-pose.pt",
-                    help="YOLO pose model (default: yolo11n-pose.pt)")
-    ap.add_argument("--conf", type=float, default=0.3, help="Detection confidence threshold")
+    ap.add_argument(
+        "--model",
+        default="yolo11n-pose.pt",
+        help="YOLO pose model (default: yolo11s-pose.pt)",
+    )
+    ap.add_argument(
+        "--conf", type=float, default=0.3, help="Detection confidence threshold"
+    )
     ap.add_argument("--iou", type=float, default=0.5, help="NMS IoU threshold")
-    ap.add_argument("--extensions", default=".mp4,.avi,.mov",
-                    help="Comma-separated video extensions")
-    ap.add_argument("--skip_existing", action="store_true",
-                    help="Skip already-processed videos")
+    ap.add_argument(
+        "--extensions",
+        default=".mp4,.avi,.mov",
+        help="Comma-separated video extensions",
+    )
+    ap.add_argument(
+        "--skip_existing", action="store_true", help="Skip already-processed videos"
+    )
     args = ap.parse_args()
 
     device = 0 if torch.cuda.is_available() else "cpu"
@@ -82,9 +95,7 @@ def main():
     model = YOLO(args.model)
 
     exts = tuple(args.extensions.split(","))
-    videos = sorted(
-        f for f in os.listdir(args.input_dir) if f.lower().endswith(exts)
-    )
+    videos = sorted(f for f in os.listdir(args.input_dir) if f.lower().endswith(exts))
 
     if not videos:
         print(f"No videos found in {args.input_dir}")
