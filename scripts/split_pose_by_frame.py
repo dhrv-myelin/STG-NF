@@ -7,7 +7,7 @@ Theft timings (0-indexed frame numbers):
   Vid3: 120-250 (pocketing)
   Vid4: 130-150 (hiding under phone)
 
-Train = frames BEFORE theft start (normal cashier behavior).
+Train = ALL frames EXCEPT the theft window (before + after = normal cashier behavior).
 Test  = ALL frames (to see the theft spike in scores).
 
 Usage:
@@ -32,8 +32,8 @@ THEFT_TIMINGS = {
 }
 
 
-def split_json(json_path, theft_start):
-    """Return (normal_dict, full_dict) where normal excludes theft_start onwards."""
+def split_json(json_path, theft_start, theft_end):
+    """Return (normal_dict, full_dict) where normal excludes the theft window."""
     with open(json_path, "r") as f:
         data = json.load(f)
 
@@ -42,7 +42,7 @@ def split_json(json_path, theft_start):
         normal_frames = {}
         for frame_key, frame_data in frames.items():
             frame_idx = int(frame_key)
-            if frame_idx < theft_start:
+            if frame_idx < theft_start or frame_idx > theft_end:
                 normal_frames[frame_key] = frame_data
         if normal_frames:
             normal[person_id] = normal_frames
@@ -75,7 +75,7 @@ def main():
         src = os.path.join(args.input_dir, jf)
         print(f"  {vid_name}: theft frames {theft_start}-{theft_end}")
 
-        normal_data, full_data = split_json(src, theft_start)
+        normal_data, full_data = split_json(src, theft_start, theft_end)
 
         # Count frames
         total_frames = sum(len(v) for v in full_data.values())
