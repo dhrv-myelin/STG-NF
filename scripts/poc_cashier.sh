@@ -3,7 +3,8 @@
 # POC: STG-NF on cashier theft videos
 #
 # All 4 videos show theft — Vid1/Vid3 = pocketing, Vid2/Vid4 = hiding under phone.
-# Train on NORMAL frames only (excluding theft window), test on ALL frames.
+# Filter to cashier only (person with most frames), train on NORMAL frames
+# (excluding theft window), test on ALL frames.
 # Then refine scores (local z-score) and amplify in theft regions.
 #
 # Theft timings (0-indexed frames):
@@ -67,13 +68,25 @@ ls -lh data/Cashier/pose/all/
 echo ""
 
 # --------------------------------------------------------------
+# 2b. Filter to cashier only (person with most frames)
+# --------------------------------------------------------------
+echo "=== Step 2b: Filter to cashier only ==="
+mkdir -p data/Cashier/pose/filtered
+
+python scripts/filter_cashier.py \
+    --input_dir data/Cashier/pose/all/ \
+    --output_dir data/Cashier/pose/filtered/
+
+echo ""
+
+# --------------------------------------------------------------
 # 3. Split by theft timing -> train (normal) / test (all)
 # --------------------------------------------------------------
 echo "=== Step 3: Split pose data by theft timing ==="
 mkdir -p data/Cashier/pose/train data/Cashier/pose/test
 
 python scripts/split_pose_by_frame.py \
-    --input_dir data/Cashier/pose/all/ \
+    --input_dir data/Cashier/pose/filtered/ \
     --train_dir data/Cashier/pose/train/ \
     --test_dir  data/Cashier/pose/test/
 
