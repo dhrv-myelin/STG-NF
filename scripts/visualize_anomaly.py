@@ -27,6 +27,17 @@ def _build_timeline_bar(width, bar_height, scores):
     return bar
 
 
+def _draw_text_with_bg(img, text, org, font_face, font_scale, text_color,
+                       bg_color=(0, 0, 0), thickness=1, padding=4):
+    """Draw text with a solid background rectangle for readability."""
+    (tw, th), baseline = cv2.getTextSize(text, font_face, font_scale, thickness)
+    x, y = org
+    cv2.rectangle(img, (x - padding, y - th - padding),
+                  (x + tw + padding, y + baseline + padding), bg_color, -1)
+    cv2.putText(img, text, (x, y), font_face, font_scale, text_color, thickness,
+                cv2.LINE_AA)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Overlay anomaly scores on a video")
     ap.add_argument("--video", required=True, help="Input video path")
@@ -37,23 +48,34 @@ def main():
                     help="Tint overlay strength (0-1, default: 0.3)")
     ap.add_argument("--timeline_height", type=int, default=40,
                     help="Height of the score timeline bar in pixels")
+    ap.add_argument("--no_tint", action="store_true",
+                    help="Disable color tint overlay on frames")
+    ap.add_argument("--raw_scores", action="store_true",
+                    help="Show actual score values instead of normalizing to [0,1]")
+    ap.add_argument("--font_scale", type=float, default=1.2,
+                    help="Font scale for the score text overlay (default: 1.2)")
     args = ap.parse_args()
 
     if args.output is None:
         stem = os.path.splitext(os.path.basename(args.video))[0]
-        args.output = f"{stem}_anomaly.mp4"
+        suffix = "_raw" if args.raw_scores else "_anomaly"
+        args.output = f"{stem}{suffix}.mp4"
 
-    scores = np.load(args.scores).astype(np.float64)
-    finite = scores[np.isfinite(scores)]
+    raw_scores = np.load(args.scores).astype(np.float64)
+    finite = raw_scores[np.isfinite(raw_scores)]
     if len(finite) == 0:
         print("ERROR: all scores are NaN/inf — cannot visualize")
         return
     vmin, vmax = finite.min(), finite.max()
-    if vmax - vmin > 1e-8:
-        scores = (scores - vmin) / (vmax - vmin)
+
+    if args.raw_scores:
+        display_scores = raw_scores.copy()
     else:
-        scores = np.zeros_like(scores)
-    scores = np.clip(scores, 0.0, 1.0)
+        if vmax - vmin > 1e-8:
+            display_scores = (raw_scores - vmin) / (vmax - vmin)
+        else:
+            display_scores = np.zeros_like(raw_scores)
+        display_scores = np.clip(display_scores, 0.0, 1.0)
 
     cap = cv2.VideoCapture(args.video)
     if not cap.isOpened():
@@ -65,15 +87,36 @@ def main():
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    if args.no_tint:
+        out_height = height + args.timeline_height + 5
+    else:
+        out_height = height + args.timeline_height + 5
+
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(args.output, fourcc, fps,
-                          (width, height + args.timeline_height + 5))
+    out = cv2.VideoWriter(args.output, fourcc, fps, (width, out_height))
 
-    timeline_bar = _build_timeline_bar(width, args.timeline_height, scores)
+    timeline_bar = _build_timeline_bar(width, args.timeline_height, display_scores)
 
-    print(f"Frames: {total_frames}  |  Scores: {len(scores)}")
-    print(f"Score range: [{vmin:.4f}, {vmax:.4f}]")
+    print(f"Frames: {total_frames}  |  Scores: {len(raw_scores)}")
+    if args.raw_scores:
+        print(f"Raw score range: [{vmin:.6f}, {vmax:.6f}]")
+    else:
+        print(f"Normalized score range: [0.0, 1.0]  (from raw [{vmin:.6f}, {vmax:.6f}])")
     print(f"Output: {args.output}")
+
+    # Font for score overlay
+    font_face = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = args.font_scale
+    font_thickness = 2
+
+    # Determine format string based on score magnitude
+    abs_max = max(abs(vmin), abs(vmax))
+    if abs_max >= 100:
+        score_fmt = "{:.1f}"
+    elif abs_max >= 1:
+        score_fmt = "{:.3f}"
+    else:
+        score_fmt = "{:.6f}"
 
     frame_idx = 0
     while True:
@@ -81,21 +124,40 @@ def main():
         if not ret:
             break
 
-        if frame_idx < len(scores):
-            s = scores[frame_idx]
+        vis = frame.copy()
+
+        if not args.no_tint and frame_idx < len(display_scores):
+            s = display_scores[frame_idx]
             tint_color = _color_for_score(s)
-            overlay = frame.copy()
+            overlay = vis.copy()
             cv2.rectangle(overlay, (0, 0), (width, height), tint_color, -1)
-            frame = cv2.addWeighted(overlay, args.alpha, frame, 1 - args.alpha, 0)
+            vis = cv2.addWeighted(overlay, args.alpha, vis, 1 - args.alpha, 0)
 
-        vis = np.vstack([frame, np.full((5, width, 3), 32, dtype=np.uint8)])
+        # Draw score text on the frame
+        if frame_idx < len(raw_scores):
+            score_val = raw_scores[frame_idx]
+            label = f"Score: {score_fmt.format(score_val)}"
+            # White text with black background, top-left corner
+            _draw_text_with_bg(vis, label, (15, 40), font_face, font_scale,
+                               text_color=(255, 255, 255), bg_color=(0, 0, 0),
+                               thickness=font_thickness, padding=6)
 
+            # Frame counter, top-right
+            frame_label = f"Frame {frame_idx}/{len(raw_scores)}"
+            _draw_text_with_bg(vis, frame_label, (width - 300, 40), font_face, 0.7,
+                               text_color=(200, 200, 200), bg_color=(0, 0, 0),
+                               thickness=1, padding=4)
+
+        # Separator line
+        vis = np.vstack([vis, np.full((3, width, 3), 32, dtype=np.uint8)])
+
+        # Timeline bar
         bar_copy = timeline_bar.copy()
-        if frame_idx < len(scores):
-            cx = int(frame_idx / len(scores) * width)
+        if frame_idx < len(display_scores):
+            cx = int(frame_idx / len(display_scores) * width)
             cv2.line(bar_copy, (cx, 0), (cx, args.timeline_height - 1),
                      (255, 255, 255), 2)
-            label = f"{scores[frame_idx]:.3f}"
+            label = f"{score_fmt.format(raw_scores[frame_idx])}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             lx = min(cx - tw // 2, width - tw - 4)
             ly = args.timeline_height - 4

@@ -159,22 +159,32 @@ echo ""
 echo "=== Step 7: Anomaly overlay videos ==="
 
 for vid in Vid1 Vid2 Vid3 Vid4; do
-    # Raw overlay
+    # Raw scores — no tint, just numeric values on screen
     raw_npy="results/raw/0_${vid}_scores.npy"
     if [ -f "$raw_npy" ]; then
         python scripts/visualize_anomaly.py \
             --video "${vid}.mp4" \
             --scores "$raw_npy" \
-            --output "results/${vid}_raw_anomaly.mp4"
+            --output "results/${vid}_raw_scores.mp4" \
+            --raw_scores --no_tint
     fi
 
-    # Amplified overlay
+    # Amplified scores — no tint, just numeric values on screen
     amp_npy="results/amplified/0_${vid}_scores.npy"
     if [ -f "$amp_npy" ]; then
         python scripts/visualize_anomaly.py \
             --video "${vid}.mp4" \
             --scores "$amp_npy" \
-            --output "results/${vid}_amplified_anomaly.mp4"
+            --output "results/${vid}_amplified_scores.mp4" \
+            --raw_scores --no_tint
+    fi
+
+    # Also keep a tinted version for visual drama
+    if [ -f "$raw_npy" ]; then
+        python scripts/visualize_anomaly.py \
+            --video "${vid}.mp4" \
+            --scores "$raw_npy" \
+            --output "results/${vid}_tinted.mp4"
     fi
 done
 echo ""
