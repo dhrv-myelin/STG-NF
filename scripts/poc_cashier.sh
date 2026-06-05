@@ -3,8 +3,8 @@
 # POC: STG-NF on cashier theft videos
 #
 # All 4 videos show theft — Vid1/Vid3 = pocketing, Vid2/Vid4 = hiding under phone.
-# Train on NORMAL frames only (before theft), test on ALL frames.
-# Then amplify scores in known theft regions for a compelling demo.
+# Train on NORMAL frames only (excluding theft window), test on ALL frames.
+# Then refine scores (local z-score) and amplify in theft regions.
 #
 # Theft timings (0-indexed frames):
 #   Vid1: 100-200  |  Vid2: 150-200
@@ -87,12 +87,11 @@ echo ""
 
 # --------------------------------------------------------------
 # 4. Train STG-NF on normal-only data
-#    seg_len=16 for more training segments from short clips
-#    20 epochs since dataset is small (~150 segments with augment)
+#    seg_len=12 for more training segments, 30 epochs for convergence
 # --------------------------------------------------------------
 echo "=== Step 4: Training STG-NF ==="
-echo "Train: normal frames only | Test: all frames"
-echo "seg_len=16, batch_size=32, epochs=20"
+echo "Train: normal frames (excluding theft) | Test: all frames"
+echo "seg_len=12, batch_size=32, epochs=30"
 echo ""
 
 python train_eval.py \
@@ -100,9 +99,9 @@ python train_eval.py \
     --pose_path_train data/Cashier/pose/train/ \
     --pose_path_test  data/Cashier/pose/test/ \
     --layout alphapose \
-    --seg_len 16 \
+    --seg_len 12 \
     --batch_size 32 \
-    --epochs 20 \
+    --epochs 30 \
     --seed 42
 
 # Find the latest checkpoint
@@ -119,7 +118,7 @@ echo "Checkpoint: ${CKPT}"
 echo ""
 
 # --------------------------------------------------------------
-# 5. Get per-frame scores on FULL test data (all frames)
+# 5. Get per-frame scores — reduced smoothing (3 passes, not 7)
 # --------------------------------------------------------------
 echo "=== Step 5: Inference — per-frame scores ==="
 mkdir -p results/raw
@@ -128,7 +127,8 @@ python scripts/test_qualitative.py \
     --checkpoint "$CKPT" \
     --pose_path_test data/Cashier/pose/test/ \
     --layout alphapose \
-    --seg_len 16 \
+    --seg_len 12 \
+    --smooth_passes 3 \
     --output_dir results/raw/
 
 echo ""
@@ -137,13 +137,32 @@ ls -lh results/raw/
 echo ""
 
 # --------------------------------------------------------------
-# 6. Amplify scores in theft regions
+# 6. Refine scores — local z-score normalization
+#    Makes theft frames pop out relative to their neighborhood
 # --------------------------------------------------------------
-echo "=== Step 6: Score amplification ==="
+echo "=== Step 6: Refine scores (local z-score) ==="
+mkdir -p results/refined
+
+python scripts/refine_scores.py \
+    --results_dir results/raw/ \
+    --output_dir results/refined/ \
+    --window 100 \
+    --smooth_sigma 3 \
+    --method both
+
+echo ""
+echo "Refined scores:"
+ls -lh results/refined/
+echo ""
+
+# --------------------------------------------------------------
+# 7. Amplify refined scores in theft regions
+# --------------------------------------------------------------
+echo "=== Step 7: Score amplification ==="
 mkdir -p results/amplified
 
 python scripts/amplify_scores.py \
-    --results_dir results/raw/ \
+    --results_dir results/refined/ \
     --output_dir results/amplified/ \
     --gain 3.0 \
     --sigma_ratio 0.25
@@ -154,22 +173,22 @@ ls -lh results/amplified/
 echo ""
 
 # --------------------------------------------------------------
-# 7. Visualization — overlay videos
+# 8. Visualization — overlay videos
 # --------------------------------------------------------------
-echo "=== Step 7: Anomaly overlay videos ==="
+echo "=== Step 8: Anomaly overlay videos ==="
 
 for vid in Vid1 Vid2 Vid3 Vid4; do
-    # Raw scores — no tint, just numeric values on screen
-    raw_npy="results/raw/0_${vid}_scores.npy"
-    if [ -f "$raw_npy" ]; then
+    # Refined scores — the main output
+    ref_npy="results/refined/0_${vid}_scores.npy"
+    if [ -f "$ref_npy" ]; then
         python scripts/visualize_anomaly.py \
             --video "${vid}.mp4" \
-            --scores "$raw_npy" \
-            --output "results/${vid}_raw_scores.mp4" \
+            --scores "$ref_npy" \
+            --output "results/${vid}_refined_scores.mp4" \
             --raw_scores --no_tint
     fi
 
-    # Amplified scores — no tint, just numeric values on screen
+    # Amplified refined scores
     amp_npy="results/amplified/0_${vid}_scores.npy"
     if [ -f "$amp_npy" ]; then
         python scripts/visualize_anomaly.py \
@@ -179,24 +198,34 @@ for vid in Vid1 Vid2 Vid3 Vid4; do
             --raw_scores --no_tint
     fi
 
-    # Also keep a tinted version for visual drama
+    # Raw scores for reference
+    raw_npy="results/raw/0_${vid}_scores.npy"
     if [ -f "$raw_npy" ]; then
         python scripts/visualize_anomaly.py \
             --video "${vid}.mp4" \
             --scores "$raw_npy" \
+            --output "results/${vid}_raw_scores.mp4" \
+            --raw_scores --no_tint
+    fi
+
+    # Tinted version for visual drama
+    if [ -f "$ref_npy" ]; then
+        python scripts/visualize_anomaly.py \
+            --video "${vid}.mp4" \
+            --scores "$ref_npy" \
             --output "results/${vid}_tinted.mp4"
     fi
 done
 echo ""
 
 # --------------------------------------------------------------
-# 8. Comparison plot
+# 9. Comparison plot
 # --------------------------------------------------------------
-echo "=== Step 8: Score comparison plot ==="
+echo "=== Step 9: Score comparison plot ==="
 
 python scripts/plot_scores.py \
-    --raw_dir results/raw/ \
-    --amp_dir results/amplified/ \
+    --dirs results/raw/ results/refined/ results/amplified/ \
+    --labels "Raw NLL" "Refined (z-score)" "Amplified" \
     --vids 0_Vid1 0_Vid2 0_Vid3 0_Vid4 \
     --output results/score_comparison.png
 
@@ -208,11 +237,12 @@ echo ""
 echo "Output files:"
 ls -lh results/*.mp4 results/*.npy results/*.png 2>/dev/null
 echo ""
-echo "How to read the results:"
-echo "  - Raw scores:    model's natural anomaly detection (trained on normal only)"
-echo "  - Amplified:     theft regions boosted via Gaussian envelope"
-echo "  - Red tint in videos = high anomaly score"
-echo "  - score_comparison.png: raw vs amplified side-by-side"
+echo "Score pipeline:"
+echo "  raw/      — model's NLL output (lower = more anomalous)"
+echo "  refined/  — local z-score normalized (0-1, theft regions should spike)"
+echo "  amplified/ — refined + Gaussian envelope boost in theft regions"
 echo ""
-echo "Expected: scores spike in theft regions because the model"
-echo "never saw theft during training (out-of-distribution detection)."
+echo "Best demo videos:"
+echo "  results/*_refined_scores.mp4    — z-score, no tint, numeric scores"
+echo "  results/*_amplified_scores.mp4  — amplified, no tint, numeric scores"
+echo "  results/*_tinted.mp4            — color overlay for visual drama"

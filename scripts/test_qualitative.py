@@ -16,7 +16,7 @@ from utils.optim_init import init_optimizer
 from models.training import Trainer
 
 
-def segment_to_frame_scores(scores, metadata, seg_len):
+def segment_to_frame_scores(scores, metadata, seg_len, smooth_passes=3):
     metadata_np = np.array(metadata)
     clip_person_frames = defaultdict(lambda: defaultdict(dict))
 
@@ -38,7 +38,7 @@ def segment_to_frame_scores(scores, metadata, seg_len):
             per_frame[per_frame == np.inf] = finite.max()
             per_frame[per_frame == -np.inf] = finite.min()
 
-        for sigma in range(1, 8):
+        for sigma in range(1, smooth_passes + 1):
             per_frame = gaussian_filter1d(per_frame, sigma=sigma)
 
         clip_key = f"{scene}_{clip}".replace(' ', '_')
@@ -59,6 +59,8 @@ def main():
     ap.add_argument('--output_dir', default='results', help='Directory to save per-clip scores')
     ap.add_argument('--batch_size', type=int, default=256)
     ap.add_argument('--num_workers', type=int, default=8)
+    ap.add_argument('--smooth_passes', type=int, default=3,
+                    help='Gaussian smoothing passes on frame scores (default: 3, was 7)')
 
     args = ap.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -117,7 +119,8 @@ def main():
     scores = trainer.test()
     print(f"Per-segment scores: {scores.shape}")
 
-    clip_scores = segment_to_frame_scores(scores, dataset.metadata, args.seg_len)
+    clip_scores = segment_to_frame_scores(scores, dataset.metadata, args.seg_len,
+                                           smooth_passes=args.smooth_passes)
 
     for clip_key, frame_scores in clip_scores.items():
         out_path = os.path.join(args.output_dir, f"{clip_key}_scores.npy")
